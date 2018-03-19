@@ -4,7 +4,6 @@
   *  Evaluates parameter arguments in currently defined macro scope - the local scope of macro check_argument
   *  is called from.
   *  Creates a user-named global macro variable that indicates a "pass-fail" for the argument check.
-  *  Cancels a session if the argument_check settings themselves are invalid.
   *
   *  @author Chris Amendola
   *  @created May 2016
@@ -33,7 +32,7 @@
   * @param fail_var       Names a macro variable in the global space, the argument check return code.<br>--- 
   * @param list_sep       Optional list argument delimiter
   *
-  * @required dolist(module) isblank(module)
+  * @required mac_map(module) isblank(module)
   *
   * @return &fail_var 1=Pass 0=Fail
   *
@@ -60,7 +59,7 @@
        *
        * @param _desc REQUIRED Exception message
        */  	                           
-     %macro exception(_desc);
+     %macro check_exception(_desc);
    	   
    	    %put ****************************************;
    	    %put ;
@@ -103,7 +102,7 @@
         
         %abort cancel;
         
-     %mend exception;
+     %mend check_exception;
 
      /**
        * Argument Fails method. <br>
@@ -145,7 +144,7 @@
                                              
          %if %quote(&_type) = DATA %then %do;
          	
-             %if not %sysfunc(exist(&_value))  %then
+             %if not (%sysfunc(exist(&_value)) or %sysfunc(exist(&_value,VIEW)))  %then
                  %the_check_failed((Parameter &parm: Input dataset (&_value) does not exist.));
              
          %end;	
@@ -170,6 +169,7 @@
                      %the_check_failed((Parameter &parm: Dataset-> &_variable_dataset failed to open!));
                  %else %if not %sysfunc(varnum(&_dsid,&_value)) %then
                      %the_check_failed(Parameter &parm: The variable (&_value) does not exist in the dataset (&_variable_dataset).);
+                 %let _clean = %sysfunc(close(&_dsid.)); 
              %end;     
                                                   
          %end;
@@ -236,7 +236,7 @@
          %end;
          %else %do;
          	
-             %exception(("&isa" not a valid Type. Valid Types: &_valid_argument_types));
+             %check_exception(("&isa" not a valid Type. Valid Types: &_valid_argument_types));
          	
          %end;    	   
      	   
@@ -268,14 +268,8 @@
     %let _mprint = %sysfunc(getoption(mprint));
     %let _symbolgen = %sysfunc(getoption(symbolgen));
     %let _mlogic = %sysfunc(getoption(mlogic));
-    %let _linesize = %sysfunc(getoption(linesize));
-   
-    /**
-      * Fail_var required
-      */
-    %if %isblank(fail_var) %then
-        %exception((fail_var set to null value!));                   
-    /**
+    %let _linesize = %sysfunc(getoption(linesize));  
+     /*
       * Initialize Failure Variable if it doesn't exist
       */                          
     %if %symglobl(&fail_var) ne 1 %then %do;
@@ -292,12 +286,12 @@
           * job/session.
           */ 
         %global &fail_var;
-		/**
-          * Failure Variable starts set to one/TRUE - "Fail"=0
-          */                        
-        %let &fail_var = 1;                  
-                     
-    %end; 
+		                                                 
+    %end;
+    /**
+      * Failure Variable starts set to one/TRUE - "Fail"=0
+      */ 
+	%let &fail_var = 1;
        
     %if &verbose = N %then %do;
         options nonotes 
@@ -311,7 +305,7 @@
     /* check_argument settings check */ 		
     /* parm cannot be null */
 	%if %isblank(parm) %then
-        %exception((parm cannot be missing, please specify a value.));
+        %check_exception((parm cannot be missing, please specify a value.));
       
     /* Source Macro Valid*/
     %let _for_macro=%sysmexecname(%sysmexecdepth-1);
@@ -325,7 +319,7 @@
     quit;
     
     %if &_calling_macro_found < 1 %then 
-        %exception((Calling macro: &_for_macro does not exist, please check setting.));
+        %check_exception((Calling macro: &_for_macro does not exist, please check setting.));
     
     /* Start Argument Evaluation */
     /* Resolve argument */
@@ -369,14 +363,14 @@
        	
 		    %if not(%isblank(numeric_min)) %then %do;
                 %if %sysfunc(inputn(&numeric_min,best12.)) = . %then
-                    %exception((numeric_min: "&numeric_min" is not a valid numeric value.)) ;
+                    %check_exception((numeric_min: "&numeric_min" is not a valid numeric value.)) ;
                 %if %sysevalf(&_argument < &numeric_min) %then
                     %the_check_failed(Parameter &parm: The value (&_argument) is less than the minimum value (&numeric_min).);
                  
             %end;
             %if not(%isblank(numeric_max)) %then %do;
                 %if %sysfunc(inputn(&numeric_max,best12.)) = . %then
-                    %exception((numeric_max: "&numeric_max" is not a valid numeric value.)) ;
+                    %check_exception((numeric_max: "&numeric_max" is not a valid numeric value.)) ;
                 %if %sysevalf(&_argument > &numeric_max) %then
                     %the_check_failed(Parameter &parm: The value (&_argument) is greater than the maximum value (&numeric_max).);    
             %end; 	
@@ -402,7 +396,7 @@
     %mend parse_argument_list; 
 
 	%if %quote(&_argument_list) ^= %str( ) %then
-        %dolist(parse_argument_list,list=&_argument_list,sep=&list_sep);
+        %mac_map(parse_argument_list,to_list=_argument_list,sep=&list_sep);
 
     /* Reset options */
     options &_notes 
