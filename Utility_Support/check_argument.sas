@@ -159,7 +159,7 @@
                  %the_check_failed((Parameter &parm: "&_value" is not a valid SAS variable name.));
                  
              /*Is the comparator dataset in existence*/
-             %else %if not %sysfunc(exist(&_variable_dataset))  %then
+             %else %if not (%sysfunc(exist(&_variable_dataset)) or %sysfunc(exist(&_variable_dataset,VIEW)))  %then
                  %the_check_failed((Parameter &parm: Dataset &_variable_dataset does not exist.));
                  
              /* Does the variable exist on the dataset*/
